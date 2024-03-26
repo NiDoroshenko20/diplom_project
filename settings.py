@@ -1,6 +1,6 @@
 # Database settings 
 
-DATABASE_PATH = '../beauty_studio_data_base/src/server/database'
+DATABASE_PATH = '../diplom_project/src/server/database'
 DATABASE_NAME = 'beauty_studio.db'
 
 # Server settings
@@ -11,4 +11,4 @@ URL = f'http://{HOST}:{PORT}'
 
 # Client settings
 
-IMG_PATH = '../beauty_studio_data_base/src/client/img'
+IMG_PATH = '../diplom_project/src/client/img'
