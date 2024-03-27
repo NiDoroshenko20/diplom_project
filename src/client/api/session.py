@@ -45,7 +45,6 @@ class Session:
             position=position,
             power_level=power_level
         ))
-        print(answer)
 
         match answer['code']:
             case 400:

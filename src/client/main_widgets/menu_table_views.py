@@ -3,11 +3,15 @@ from src.server.router import *
 from src.client.dialog_forms.table_action_dialog import TableAction
 from src.client.api.resolvers import add_action, upd_action, del_action
 import settings
+import typing
+import threading
+import time
 
 
 class MenuTableViews(QtWidgets.QFrame):
     router: RouterManager = None
     dialog: TableAction = None
+    add_signal: QtCore.Signal = QtCore.Signal(typing.Any, int, str)
     def __init__(self, parent: QtWidgets.QWidget) -> None:
         super().__init__(parent)
         self.parent = parent
@@ -65,11 +69,7 @@ class MenuTableViews(QtWidgets.QFrame):
                         if widget.objectName() == router.object_name:
                             widget.set_router(router)
         
-        self.table.hide()
-        self.add_button.hide()
-        self.update_button.hide()
-        self.delete_button.hide()
-        self.cancel_button.hide()
+        self.switch_state(False)
 
         self.cancel_button.setFixedSize(22, 22)
         self.cancel_button.setIcon(QtGui.QPixmap(f'{settings.IMG_PATH}/cancel_reversed.png'))
@@ -80,35 +80,48 @@ class MenuTableViews(QtWidgets.QFrame):
         self.update_button.clicked.connect(self.upd_button_clicked)
         self.delete_button.clicked.connect(self.del_button_clicked)
         self.button_group.buttonClicked.connect(self.button_clicked)
+        self.add_signal.connect(self.add_item_in_table)
     
     def button_clicked(self, button: QtWidgets.QPushButton) -> None:
-        self.fill_table(button.router)
         self.router = button.router
-        self.scroll_area.hide()
-        self.table.show()
-        self.cancel_button.show()
-        self.add_button.show()
-        self.update_button.show()
-        self.delete_button.show()
+        self.update_table(self.router)
+        self.switch_state(True)
     
-    def fill_table(self, router) -> None:
+    def switch_state(self, switch: bool) -> None:
+        self.table.hide() if not switch else self.table.show()
+        self.add_button.hide() if not switch else self.add_button.show()
+        self.update_button.hide() if not switch else self.update_button.show()
+        self.delete_button.hide() if not switch else self.delete_button.show()
+        self.cancel_button.hide() if not switch else self.cancel_button.show()
+        self.scroll_area.show() if not switch else self.scroll_area.hide()
+    
+    def change_meta_data_table(self, router) -> None:
         self.table.setColumnCount(len(router.database_model._meta.sorted_field_names))
         self.table.setHorizontalHeaderLabels(router.database_model._meta.sorted_field_names)
         self.table.setRowCount(router.database_model.select().count())
         self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
+
+    def update_table(self, router) -> None:
+        thread = threading.Thread(target=self.fill_table, args=(router,))
+        thread.start()
+        thread.join()
+
+    def fill_table(self, router) -> None:
+        print("Worker is running in thread:", threading.current_thread().name)
+        self.change_meta_data_table(router)
         for model in router.database_model.select():
             for j, column in enumerate(router.database_model._meta.sorted_field_names):
-                item = QtWidgets.QTableWidgetItem(str(eval(f'model.{column}')))
-                self.table.setItem(model.id - 1, j, item)
+                self.add_signal.emit(model, j, column)
+                time.sleep(0.05)
+    
+    @QtCore.Slot(typing.Any, int, str)
+    def add_item_in_table(self, model: typing.Any, j: int, column: str) -> None:
+        item = QtWidgets.QTableWidgetItem(str(eval(f'model.{column}')))
+        self.table.setItem(model.id - 1, j, item)
 
     def cancel_button_clicked(self) -> None:
         self.router = None
-        self.table.hide()
-        self.cancel_button.hide()
-        self.scroll_area.show()
-        self.add_button.hide()
-        self.update_button.hide()
-        self.delete_button.hide()
+        self.switch_state(False)
 
     def create_data(self, dialog: TableAction) -> str:
         data = '{'
@@ -134,7 +147,7 @@ class MenuTableViews(QtWidgets.QFrame):
 
         add_action(self.router.object_name, data)
 
-        self.fill_table(self.router)
+        self.update_table(self.router)
 
     def upd_button_clicked(self) -> None:
         if self.table.currentRow() == -1:
@@ -154,7 +167,7 @@ class MenuTableViews(QtWidgets.QFrame):
 
         upd_action(id, self.router.object_name, data)
 
-        self.fill_table(self.router)
+        self.update_table(self.router)
 
     def del_button_clicked(self) -> None:
         if self.table.currentRow() == -1:
@@ -170,7 +183,7 @@ class MenuTableViews(QtWidgets.QFrame):
 
         del_action(id, self.router.object_name)
         
-        self.fill_table(self.router)
+        self.update_table(self.router)
 
     class ModifyButton(QtWidgets.QPushButton):
         router = None
